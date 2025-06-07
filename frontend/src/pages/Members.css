@@ -1,0 +1,70 @@
+.members {
+  padding: 1rem;
+}
+
+.members h1 {
+  margin-bottom: 2rem;
+  color: #172b4d;
+}
+
+.members-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.member-card {
+  background-color: white;
+  border-radius: 3px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.member-card-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.member-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.member-info h3 {
+  margin: 0;
+  color: #172b4d;
+}
+
+.member-info p {
+  margin: 0.25rem 0 0;
+  color: #6b778c;
+  font-size: 0.9rem;
+}
+
+.member-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #dfe1e6;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #172b4d;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: #6b778c;
+} 

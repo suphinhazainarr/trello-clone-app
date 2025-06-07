@@ -1,0 +1,36 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content {
+  display: flex;
+  flex: 1;
+  margin-top: 60px; /* Height of navbar */
+}
+
+.main-content {
+  flex: 1;
+  margin-left: 240px; /* Width of sidebar */
+  padding: 2rem;
+  background-color: #f4f5f7;
+  min-height: calc(100vh - 60px);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .main-content {
+    margin-left: 0;
+    padding: 1rem;
+  }
+
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+} 

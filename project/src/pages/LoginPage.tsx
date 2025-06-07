@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Layout } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import axios from 'axios';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -26,7 +27,11 @@ const LoginPage: React.FC = () => {
         setError('Invalid email or password');
       }
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      if (axios.isAxiosError(err) && err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('An error occurred. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

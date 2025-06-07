@@ -11,6 +11,8 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ onClose }) => {
   const [title, setTitle] = useState('');
   const [selectedBackground, setSelectedBackground] = useState('linear-gradient(135deg, #667eea 0%, #764ba2 100%)');
   const [visibility, setVisibility] = useState<'private' | 'team' | 'public'>('private');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   const { createBoard } = useBoard();
   const navigate = useNavigate();
@@ -26,12 +28,21 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ onClose }) => {
     'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (title.trim()) {
-      const boardId = createBoard(title.trim(), selectedBackground);
+    if (!title.trim()) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const boardId = await createBoard(title.trim(), selectedBackground);
       navigate(`/board/${boardId}`);
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create board');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -49,6 +60,12 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ onClose }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
+              {error}
+            </div>
+          )}
+
           {/* Board Preview */}
           <div className="relative">
             <div 
@@ -74,6 +91,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ onClose }) => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Add board title"
               maxLength={50}
+              disabled={isLoading}
             />
             <p className="text-xs text-gray-500 mt-1">{title.length}/50</p>
           </div>
@@ -94,6 +112,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ onClose }) => {
                     background: bg,
                     borderColor: selectedBackground === bg ? '#3b82f6' : 'transparent'
                   }}
+                  disabled={isLoading}
                 >
                   {selectedBackground === bg && (
                     <div className="absolute inset-0 flex items-center justify-center">
@@ -119,6 +138,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ onClose }) => {
                   checked={visibility === 'private'}
                   onChange={(e) => setVisibility(e.target.value as 'private')}
                   className="text-blue-600 focus:ring-blue-500"
+                  disabled={isLoading}
                 />
                 <div>
                   <div className="font-medium text-gray-900">Private</div>
@@ -134,6 +154,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ onClose }) => {
                   checked={visibility === 'team'}
                   onChange={(e) => setVisibility(e.target.value as 'team')}
                   className="text-blue-600 focus:ring-blue-500"
+                  disabled={isLoading}
                 />
                 <div>
                   <div className="font-medium text-gray-900">Team</div>
@@ -149,6 +170,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ onClose }) => {
                   checked={visibility === 'public'}
                   onChange={(e) => setVisibility(e.target.value as 'public')}
                   className="text-blue-600 focus:ring-blue-500"
+                  disabled={isLoading}
                 />
                 <div>
                   <div className="font-medium text-gray-900">Public</div>
@@ -164,15 +186,16 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ onClose }) => {
               type="button"
               onClick={onClose}
               className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
+              disabled={isLoading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={!title.trim()}
+              disabled={!title.trim() || isLoading}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              Create board
+              {isLoading ? 'Creating...' : 'Create board'}
             </button>
           </div>
         </form>

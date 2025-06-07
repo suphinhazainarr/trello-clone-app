@@ -10,21 +10,35 @@ import CardModal from '../components/CardModal';
 const BoardPage: React.FC = () => {
   const { boardId } = useParams<{ boardId: string }>();
   const navigate = useNavigate();
-  const { boards, setCurrentBoard, currentBoard, addList, moveCard } = useBoard();
+  const { boards, currentBoard, addList, moveCard, fetchBoard } = useBoard();
   const [showAddList, setShowAddList] = useState(false);
   const [newListTitle, setNewListTitle] = useState('');
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (boardId) {
-      const board = boards.find(b => b.id === boardId);
-      if (board) {
-        setCurrentBoard(board);
-      } else {
+    const loadBoard = async () => {
+      if (!boardId) {
         navigate('/dashboard');
+        return;
       }
-    }
-  }, [boardId, boards, setCurrentBoard, navigate]);
+
+      try {
+        setLoading(true);
+        setError(null);
+        await fetchBoard(boardId);
+      } catch (err) {
+        console.error('Error loading board:', err);
+        setError('Failed to load board');
+        navigate('/dashboard');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadBoard();
+  }, [boardId, fetchBoard, navigate]);
 
   const handleAddList = () => {
     if (newListTitle.trim() && currentBoard) {
@@ -69,12 +83,29 @@ const BoardPage: React.FC = () => {
     }
   };
 
-  if (!currentBoard) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
         <div className="flex items-center justify-center pt-20">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !currentBoard) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <div className="flex flex-col items-center justify-center pt-20">
+          <div className="text-red-500 text-lg mb-4">{error || 'Board not found'}</div>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+          >
+            Return to Dashboard
+          </button>
         </div>
       </div>
     );

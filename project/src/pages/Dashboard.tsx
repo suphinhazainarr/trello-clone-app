@@ -6,12 +6,18 @@ import Header from '../components/Header';
 import CreateBoardModal from '../components/CreateBoardModal';
 import SearchFilter from '../components/SearchFilter';
 
+interface FilterOptions {
+  labels: string[];
+  members: string[];
+  dueDateRange: 'overdue' | 'today' | 'week' | 'month' | null;
+}
+
 const Dashboard: React.FC = () => {
   const { boards } = useBoard();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<FilterOptions>({
     labels: [],
     members: [],
     dueDateRange: null
@@ -82,15 +88,22 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div className="ml-9 space-y-1">
                   <Link
+                    key="boards-link"
                     to="/dashboard"
                     className="block px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded"
                   >
                     Boards
                   </Link>
-                  <button className="block w-full text-left px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded">
+                  <button
+                    key="members-button"
+                    className="block w-full text-left px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded"
+                  >
                     Members
                   </button>
-                  <button className="block w-full text-left px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded">
+                  <button
+                    key="settings-button"
+                    className="block w-full text-left px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded"
+                  >
                     Settings
                   </button>
                 </div>
@@ -229,18 +242,16 @@ const Dashboard: React.FC = () => {
                   <Link
                     key={board.id}
                     to={`/board/${board.id}`}
-                    className="group relative h-24 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow"
-                    style={{ background: board.background }}
+                    className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 flex flex-col"
                   >
-                    <div className="absolute inset-0 bg-black bg-opacity-20 group-hover:bg-opacity-30 transition-colors"></div>
-                    <div className="relative p-4 h-full flex flex-col justify-between text-white">
-                      <h3 className="font-medium truncate">{board.title}</h3>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-1 text-xs opacity-90">
-                          {getVisibilityIcon(board.visibility)}
-                          <span className="capitalize">{board.visibility}</span>
-                        </div>
-                        <Star className="h-4 w-4 opacity-0 group-hover:opacity-70 transition-opacity" />
+                    <div
+                      className="h-32 rounded-lg mb-3 bg-cover bg-center"
+                      style={{ background: board.background }}
+                    ></div>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-medium text-gray-900">{board.title}</h3>
+                      <div className="flex items-center space-x-2">
+                        {getVisibilityIcon(board.visibility)}
                       </div>
                     </div>
                   </Link>
