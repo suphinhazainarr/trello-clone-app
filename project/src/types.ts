@@ -34,4 +34,5 @@ export interface Board {
   members: { user: User; role: 'admin' | 'member' }[];
   lists: List[];
   activity: { id: string; text: string; date: string; user: User }[];
+  isStarred?: boolean;
 } 

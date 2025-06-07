@@ -5,6 +5,7 @@ import { useBoard } from '../contexts/BoardContext';
 import Header from '../components/Header';
 import CreateBoardModal from '../components/CreateBoardModal';
 import SearchFilter from '../components/SearchFilter';
+import { Board } from '../types';
 
 interface FilterOptions {
   labels: string[];
@@ -23,12 +24,13 @@ const Dashboard: React.FC = () => {
     dueDateRange: null
   });
 
+  const starredBoards = boards.filter((board: Board) => board.isStarred);
+  const recentBoards = boards.slice(0, 4);
+  const allBoards = boards;
+
   const filteredBoards = boards.filter(board =>
     board.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  const recentBoards = filteredBoards.slice(0, 4);
-  const allBoards = filteredBoards;
 
   const getVisibilityIcon = (visibility: string) => {
     switch (visibility) {
@@ -88,20 +90,17 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div className="ml-9 space-y-1">
                   <Link
-                    key="boards-link"
                     to="/dashboard"
                     className="block px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded"
                   >
                     Boards
                   </Link>
                   <button
-                    key="members-button"
                     className="block w-full text-left px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded"
                   >
                     Members
                   </button>
                   <button
-                    key="settings-button"
                     className="block w-full text-left px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded"
                   >
                     Settings
@@ -175,149 +174,73 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Recently Viewed */}
-          {recentBoards.length > 0 && (
-            <div className="mb-12">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center space-x-2">
-                <Clock className="h-5 w-5" />
-                <span>Recently viewed</span>
-              </h2>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {recentBoards.map((board) => (
+          {/* Starred Boards */}
+          {starredBoards.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-lg font-semibold mb-4">⭐ Starred Boards</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {starredBoards.map((board: Board) => (
                   <Link
                     key={board.id}
                     to={`/board/${board.id}`}
-                    className="group relative h-24 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow"
-                    style={{ background: board.background }}
+                    className="block p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+                    style={{ backgroundColor: board.background }}
                   >
-                    <div className="absolute inset-0 bg-black bg-opacity-20 group-hover:bg-opacity-30 transition-colors"></div>
-                    <div className="relative p-4 h-full flex flex-col justify-between text-white">
-                      <h3 className="font-medium truncate">{board.title}</h3>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-1 text-xs opacity-90">
-                          {getVisibilityIcon(board.visibility)}
-                          <span className="capitalize">{board.visibility}</span>
-                        </div>
-                        <Star className="h-4 w-4 opacity-0 group-hover:opacity-70 transition-opacity" />
-                      </div>
-                    </div>
+                    <h3 className="font-medium text-gray-900">{board.title}</h3>
                   </Link>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Your Boards */}
+          {/* Recent Boards */}
           <div className="mb-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 flex items-center space-x-2">
-                <TrendingUp className="h-5 w-5" />
-                <span>Your boards</span>
-              </h2>
+            <h2 className="text-lg font-semibold mb-4">🕒 Recent Boards</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {recentBoards.map((board: Board) => (
+                <Link
+                  key={`recent-${board.id}`}
+                  to={`/board/${board.id}`}
+                  className="block p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+                  style={{ backgroundColor: board.background }}
+                >
+                  <h3 className="font-medium text-gray-900">{board.title}</h3>
+                  <div className="flex items-center mt-2 text-sm text-gray-600">
+                    {getVisibilityIcon(board.visibility)}
+                    <span className="ml-1 capitalize">{board.visibility}</span>
+                  </div>
+                </Link>
+              ))}
               <button
+                key="create-board-button"
                 onClick={() => setShowCreateModal(true)}
-                className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                className="block p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors text-center"
               >
-                <Plus className="h-4 w-4" />
-                <span>Create board</span>
+                <Plus className="mx-auto mb-2" />
+                <span className="font-medium text-gray-600">Create new board</span>
               </button>
             </div>
-            
-            {viewMode === 'grid' ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Create New Board Card */}
-                <button
-                  onClick={() => setShowCreateModal(true)}
-                  className="h-24 bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors flex items-center justify-center group"
-                >
-                  <div className="text-center">
-                    <Plus className="h-6 w-6 text-gray-400 group-hover:text-gray-600 mx-auto mb-1" />
-                    <span className="text-sm text-gray-600 group-hover:text-gray-800">Create new board</span>
-                  </div>
-                </button>
+          </div>
 
-                {/* Board Cards */}
-                {allBoards.map((board) => (
-                  <Link
-                    key={board.id}
-                    to={`/board/${board.id}`}
-                    className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 flex flex-col"
-                  >
-                    <div
-                      className="h-32 rounded-lg mb-3 bg-cover bg-center"
-                      style={{ background: board.background }}
-                    ></div>
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-medium text-gray-900">{board.title}</h3>
-                      <div className="flex items-center space-x-2">
-                        {getVisibilityIcon(board.visibility)}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg shadow overflow-hidden">
-                <div className="px-6 py-3 border-b border-gray-200 bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-gray-900">Board name</h3>
-                    <div className="flex items-center space-x-8">
-                      <span className="text-sm font-medium text-gray-900">Visibility</span>
-                      <span className="text-sm font-medium text-gray-900">Members</span>
-                    </div>
+          {/* All Boards */}
+          <div>
+            <h2 className="text-lg font-semibold mb-4">📋 All Boards</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {allBoards.map((board: Board) => (
+                <Link
+                  key={`all-${board.id}`}
+                  to={`/board/${board.id}`}
+                  className="block p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+                  style={{ backgroundColor: board.background }}
+                >
+                  <h3 className="font-medium text-gray-900">{board.title}</h3>
+                  <div className="flex items-center mt-2 text-sm text-gray-600">
+                    {getVisibilityIcon(board.visibility)}
+                    <span className="ml-1 capitalize">{board.visibility}</span>
                   </div>
-                </div>
-                
-                <div className="divide-y divide-gray-200">
-                  <div className="px-6 py-4 hover:bg-gray-50 cursor-pointer" onClick={() => setShowCreateModal(true)}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center">
-                          <Plus className="h-4 w-4 text-gray-400" />
-                        </div>
-                        <span className="text-gray-600">Create new board</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {allBoards.map((board) => (
-                    <Link
-                      key={board.id}
-                      to={`/board/${board.id}`}
-                      className="block px-6 py-4 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div 
-                            className="w-8 h-8 rounded flex items-center justify-center"
-                            style={{ background: board.background }}
-                          >
-                            <span className="text-white text-xs font-bold">
-                              {board.title.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                          <span className="font-medium text-gray-900">{board.title}</span>
-                        </div>
-                        <div className="flex items-center space-x-8">
-                          <div className="flex items-center space-x-1 text-sm text-gray-500">
-                            {getVisibilityIcon(board.visibility)}
-                            <span className="capitalize">{board.visibility}</span>
-                          </div>
-                          <div className="flex items-center space-x-1">
-                            <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                              <span className="text-xs text-white font-medium">
-                                {board.members.length}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
+                </Link>
+              ))}
+            </div>
           </div>
 
           {/* Empty State */}

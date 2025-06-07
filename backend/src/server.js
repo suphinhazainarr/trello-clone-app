@@ -13,8 +13,7 @@ const corsOptions = {
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   methods: ['GET', 'POST', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-  transports: ['websocket', 'polling']
+  credentials: true
 };
 
 // Apply CORS to Express
@@ -22,7 +21,16 @@ app.use(cors(corsOptions));
 app.use(express.json());
 
 // Initialize Socket.IO with CORS
-socketService.initialize(server, corsOptions);
+socketService.initialize(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+  },
+  path: '/socket.io/',
+  transports: ['websocket', 'polling']
+});
 
 // Routes
 app.use('/api/auth', require('./routes/auth.routes'));

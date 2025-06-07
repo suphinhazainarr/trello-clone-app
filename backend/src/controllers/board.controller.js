@@ -8,6 +8,11 @@ const socketService = require('../services/socket.service');
 exports.createBoard = async (req, res) => {
   try {
     const { title, background } = req.body;
+
+    if (!title || typeof title !== 'string') {
+      return res.status(400).json({ message: 'Title is required and must be a string' });
+    }
+
     let board = await Board.create({
       title,
       background,
@@ -63,7 +68,13 @@ exports.getBoards = async (req, res) => {
 // Get a single board by ID
 exports.getBoard = async (req, res) => {
   try {
-    const board = await Board.findById(req.params.id)
+    const { id } = req.params;
+    
+    if (!id || id === 'undefined') {
+      return res.status(400).json({ message: 'Invalid board ID' });
+    }
+
+    const board = await Board.findById(id)
       .populate('owner', 'name email')
       .populate('members.user', 'name email')
       .populate({
@@ -93,6 +104,9 @@ exports.getBoard = async (req, res) => {
     res.json(board);
   } catch (error) {
     console.error('Error getting board:', error);
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid board ID format' });
+    }
     res.status(500).json({ message: 'Error getting board', error: error.message });
   }
 };

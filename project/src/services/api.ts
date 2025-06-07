@@ -20,6 +20,29 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Add response interceptor for error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      // Server responded with error
+      console.error('API Error:', {
+        status: error.response.status,
+        data: error.response.data
+      });
+      throw new Error(error.response.data.message || 'Server error');
+    } else if (error.request) {
+      // Request made but no response
+      console.error('Network Error:', error.request);
+      throw new Error('Network error - no response from server');
+    } else {
+      // Error setting up request
+      console.error('Request Error:', error.message);
+      throw new Error('Error setting up request');
+    }
+  }
+);
+
 // Board API calls
 export const createBoard = async (data: { title: string; background: string }) => {
   const response = await api.post('/boards', data);
@@ -32,21 +55,36 @@ export const getBoards = async () => {
 };
 
 export const getBoard = async (boardId: string): Promise<Board> => {
+  if (!boardId || boardId === 'undefined') {
+    throw new Error('Invalid board ID');
+  }
   const response = await api.get(`/boards/${boardId}`);
+  if (!response.data) {
+    throw new Error('Board not found');
+  }
   return response.data;
 };
 
 export const updateBoard = async (id: string, data: any) => {
+  if (!id || id === 'undefined') {
+    throw new Error('Invalid board ID');
+  }
   const response = await api.patch(`/boards/${id}`, data);
   return response.data;
 };
 
 export const deleteBoard = async (id: string) => {
+  if (!id || id === 'undefined') {
+    throw new Error('Invalid board ID');
+  }
   await api.delete(`/boards/${id}`);
 };
 
 // List API calls
 export const createList = async (boardId: string, data: { title: string }) => {
+  if (!boardId || boardId === 'undefined') {
+    throw new Error('Invalid board ID');
+  }
   const response = await api.post(`/boards/${boardId}/lists`, data);
   return response.data;
 };

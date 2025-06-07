@@ -6,11 +6,12 @@ import { useBoard } from '../contexts/BoardContext';
 import Header from '../components/Header';
 import BoardList from '../components/BoardList';
 import CardModal from '../components/CardModal';
+import { Board, User } from '../types';
 
 const BoardPage: React.FC = () => {
   const { boardId } = useParams<{ boardId: string }>();
   const navigate = useNavigate();
-  const { boards, currentBoard, addList, moveCard, fetchBoard } = useBoard();
+  const { boards, currentBoard, addList, moveCard, fetchBoard, setCurrentBoard } = useBoard();
   const [showAddList, setShowAddList] = useState(false);
   const [newListTitle, setNewListTitle] = useState('');
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -20,6 +21,8 @@ const BoardPage: React.FC = () => {
   useEffect(() => {
     const loadBoard = async () => {
       if (!boardId) {
+        console.error('Board ID is missing');
+        setError('Board ID is missing');
         navigate('/dashboard');
         return;
       }
@@ -30,7 +33,7 @@ const BoardPage: React.FC = () => {
         await fetchBoard(boardId);
       } catch (err) {
         console.error('Error loading board:', err);
-        setError('Failed to load board');
+        setError(err instanceof Error ? err.message : 'Failed to load board');
         navigate('/dashboard');
       } finally {
         setLoading(false);
@@ -38,13 +41,25 @@ const BoardPage: React.FC = () => {
     };
 
     loadBoard();
-  }, [boardId, fetchBoard, navigate]);
 
-  const handleAddList = () => {
-    if (newListTitle.trim() && currentBoard) {
-      addList(currentBoard.id, newListTitle.trim());
+    // Clean up function
+    return () => {
+      setCurrentBoard(null);
+    };
+  }, [boardId, fetchBoard, navigate, setCurrentBoard]);
+
+  const handleAddList = async () => {
+    if (!newListTitle.trim() || !currentBoard) {
+      return;
+    }
+
+    try {
+      await addList(currentBoard.id, newListTitle.trim());
       setNewListTitle('');
       setShowAddList(false);
+    } catch (err) {
+      console.error('Error adding list:', err);
+      // Show error message to user
     }
   };
 

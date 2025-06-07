@@ -6,41 +6,79 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 class SocketService {
   private socket: Socket | null = null;
   private boardListeners: Map<string, Function[]> = new Map();
+  private connectionAttempts = 0;
+  private maxRetries = 3;
+  private retryDelay = 2000;
 
   connect() {
-    if (this.socket) return;
+    if (this.socket?.connected) return;
 
     const token = localStorage.getItem('trello-token');
-    if (!token) return;
+    if (!token) {
+      console.error('No token found');
+      return;
+    }
 
-    this.socket = io(API_URL, {
-      auth: { token },
-      transports: ['polling', 'websocket'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      timeout: 20000,
-      forceNew: true
-    });
+    if (this.connectionAttempts >= this.maxRetries) {
+      console.error('Max connection attempts reached');
+      return;
+    }
 
-    this.setupListeners();
+    this.connectionAttempts++;
+
+    try {
+      this.socket = io(API_URL, {
+        auth: { token },
+        transports: ['polling', 'websocket'],
+        reconnection: true,
+        reconnectionAttempts: 3,
+        reconnectionDelay: this.retryDelay,
+        timeout: 20000,
+        path: '/socket.io/',
+        withCredentials: true
+      });
+
+      this.setupListeners();
+    } catch (error) {
+      console.error('Socket connection error:', error);
+      this.handleConnectionError();
+    }
+  }
+
+  private handleConnectionError() {
+    if (this.connectionAttempts < this.maxRetries) {
+      console.log(`Retrying connection in ${this.retryDelay}ms...`);
+      setTimeout(() => this.connect(), this.retryDelay);
+    }
   }
 
   disconnect() {
     if (!this.socket) return;
     this.socket.disconnect();
     this.socket = null;
+    this.connectionAttempts = 0;
+    this.boardListeners.clear();
   }
 
   private setupListeners() {
     if (!this.socket) return;
 
     this.socket.on('connect', () => {
-      console.log('Socket connected');
+      console.log('Socket connected successfully');
+      this.connectionAttempts = 0;
     });
 
-    this.socket.on('disconnect', () => {
-      console.log('Socket disconnected');
+    this.socket.on('disconnect', (reason) => {
+      console.log('Socket disconnected:', reason);
+      if (reason === 'io server disconnect') {
+        // Server initiated disconnect, try to reconnect
+        setTimeout(() => this.connect(), this.retryDelay);
+      }
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+      this.handleConnectionError();
     });
 
     this.socket.on('error', (error) => {
@@ -92,16 +130,21 @@ class SocketService {
   }
 
   joinBoard(boardId: string) {
-    if (!this.socket) return;
-    this.socket.emit('join-board', boardId);
+    if (!this.socket?.connected) {
+      console.warn('Socket not connected, attempting to connect...');
+      this.connect();
+      setTimeout(() => this.joinBoard(boardId), 1000);
+      return;
+    }
+    this.socket.emit('join:board', boardId);
   }
 
   leaveBoard(boardId: string) {
-    if (!this.socket) return;
-    this.socket.emit('leave-board', boardId);
+    if (!this.socket?.connected) return;
+    this.socket.emit('leave:board', boardId);
   }
 
-  onBoardEvent(boardId: string, callback: Function) {
+  onBoardEvent(boardId: string, callback: (event: string, data: any) => void) {
     if (!this.boardListeners.has(boardId)) {
       this.boardListeners.set(boardId, []);
     }
@@ -110,15 +153,11 @@ class SocketService {
 
   offBoardEvent(boardId: string, callback: Function) {
     const listeners = this.boardListeners.get(boardId);
-    if (!listeners) return;
-
-    const index = listeners.indexOf(callback);
-    if (index !== -1) {
-      listeners.splice(index, 1);
-    }
-
-    if (listeners.length === 0) {
-      this.boardListeners.delete(boardId);
+    if (listeners) {
+      const index = listeners.indexOf(callback);
+      if (index !== -1) {
+        listeners.splice(index, 1);
+      }
     }
   }
 

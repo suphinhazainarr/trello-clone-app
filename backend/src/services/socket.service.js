@@ -9,16 +9,10 @@ class SocketService {
     this.userSockets = new Map(); // userId -> socket
   }
 
-  initialize(server, corsOptions) {
-    this.io = socketIO(server, {
-      cors: corsOptions,
-      transports: ['polling', 'websocket'],
-      pingTimeout: 60000,
-      pingInterval: 25000,
-      connectTimeout: 20000,
-      allowEIO3: true
-    });
+  initialize(server, options) {
+    this.io = socketIO(server, options);
 
+    // Authentication middleware
     this.io.use(async (socket, next) => {
       try {
         const token = socket.handshake.auth.token;
@@ -36,37 +30,50 @@ class SocketService {
         next();
       } catch (error) {
         console.error('Socket authentication error:', error);
-        next(new Error('Authentication error: Invalid token'));
+        next(new Error('Authentication error'));
       }
     });
 
     this.io.on('connection', (socket) => {
-      console.log(`User connected: ${socket.user.name}`);
+      console.log('User connected:', socket.user._id);
       this.userSockets.set(socket.user._id.toString(), socket);
 
-      // Join board rooms
-      socket.on('join-board', (boardId) => {
-        console.log(`User ${socket.user.name} joining board ${boardId}`);
-        socket.join(`board:${boardId}`);
-      });
-
-      // Leave board rooms
-      socket.on('leave-board', (boardId) => {
-        console.log(`User ${socket.user.name} leaving board ${boardId}`);
-        socket.leave(`board:${boardId}`);
-      });
-
-      // Handle disconnection
       socket.on('disconnect', () => {
-        console.log(`User disconnected: ${socket.user.name}`);
+        console.log('User disconnected:', socket.user._id);
         this.userSockets.delete(socket.user._id.toString());
       });
 
-      // Handle errors
+      socket.on('join:board', (boardId) => {
+        console.log('User joined board:', boardId);
+        socket.join(`board:${boardId}`);
+      });
+
+      socket.on('leave:board', (boardId) => {
+        console.log('User left board:', boardId);
+        socket.leave(`board:${boardId}`);
+      });
+
       socket.on('error', (error) => {
-        console.error(`Socket error for user ${socket.user.name}:`, error);
+        console.error('Socket error:', error);
       });
     });
+
+    console.log('Socket.IO initialized');
+  }
+
+  // Emit events to all users in a board
+  emitToBoardUsers(boardId, event, data) {
+    if (!this.io) return;
+    this.io.to(`board:${boardId}`).emit(event, data);
+  }
+
+  // Emit events to a specific user
+  emitToUser(userId, event, data) {
+    if (!this.io) return;
+    const socket = this.userSockets.get(userId.toString());
+    if (socket) {
+      socket.emit(event, data);
+    }
   }
 
   // Helper method to create activity log
@@ -224,156 +231,6 @@ class SocketService {
       activity
     });
   }
-
-  async emitCardMoved(card, fromList, toList, userId) {
-    const activity = await this.createActivity(
-      userId,
-      'CARD_MOVED',
-      card.board,
-      `Card "${card.title}" was moved from "${fromList.title}" to "${toList.title}"`
-    );
-
-    this.io.to(`board:${card.board}`).emit('card-moved', {
-      card,
-      fromList,
-      toList,
-      activity
-    });
-  }
-
-  // Comment events
-  async emitCommentAdded(card, comment, userId) {
-    const activity = await this.createActivity(
-      userId,
-      'COMMENT_ADDED',
-      card.board,
-      `Comment was added to card "${card.title}"`
-    );
-
-    this.io.to(`board:${card.board}`).emit('comment-added', {
-      cardId: card._id,
-      comment,
-      activity
-    });
-
-    // Notify mentioned users
-    if (comment.mentions && comment.mentions.length > 0) {
-      comment.mentions.forEach(userId => {
-        const userSocket = this.userSockets.get(userId.toString());
-        if (userSocket) {
-          userSocket.emit('mention', {
-            cardId: card._id,
-            cardTitle: card.title,
-            comment,
-            activity
-          });
-        }
-      });
-    }
-  }
-
-  // Checklist events
-  async emitChecklistCreated(card, checklist, userId) {
-    const activity = await this.createActivity(
-      userId,
-      'CHECKLIST_CREATED',
-      card.board,
-      `Checklist "${checklist.title}" was added to card "${card.title}"`
-    );
-
-    this.io.to(`board:${card.board}`).emit('checklist-created', {
-      cardId: card._id,
-      checklist,
-      activity
-    });
-  }
-
-  async emitChecklistUpdated(card, checklist, userId, changes) {
-    const activity = await this.createActivity(
-      userId,
-      'CHECKLIST_UPDATED',
-      card.board,
-      `Checklist "${checklist.title}" was updated in card "${card.title}"`,
-      { changes }
-    );
-
-    this.io.to(`board:${card.board}`).emit('checklist-updated', {
-      cardId: card._id,
-      checklist,
-      activity
-    });
-  }
-
-  // Member events
-  async emitMemberAdded(board, user, addedBy) {
-    const activity = await this.createActivity(
-      addedBy,
-      'MEMBER_ADDED',
-      board._id,
-      `${user.name} was added to board "${board.title}"`
-    );
-
-    this.io.to(`board:${board._id}`).emit('member-added', {
-      boardId: board._id,
-      user,
-      activity
-    });
-
-    // Notify the added user
-    const userSocket = this.userSockets.get(user._id.toString());
-    if (userSocket) {
-      userSocket.emit('board-invitation', {
-        board,
-        activity
-      });
-    }
-  }
-
-  async emitMemberRemoved(board, user, removedBy) {
-    const activity = await this.createActivity(
-      removedBy,
-      'MEMBER_REMOVED',
-      board._id,
-      `${user.name} was removed from board "${board.title}"`
-    );
-
-    this.io.to(`board:${board._id}`).emit('member-removed', {
-      boardId: board._id,
-      userId: user._id,
-      activity
-    });
-  }
-
-  // Attachment events
-  async emitAttachmentAdded(card, attachment, userId) {
-    const activity = await this.createActivity(
-      userId,
-      'ATTACHMENT_ADDED',
-      card.board,
-      `Attachment "${attachment.name}" was added to card "${card.title}"`
-    );
-
-    this.io.to(`board:${card.board}`).emit('attachment-added', {
-      cardId: card._id,
-      attachment,
-      activity
-    });
-  }
-
-  async emitAttachmentRemoved(card, attachment, userId) {
-    const activity = await this.createActivity(
-      userId,
-      'ATTACHMENT_REMOVED',
-      card.board,
-      `Attachment "${attachment.name}" was removed from card "${card.title}"`
-    );
-
-    this.io.to(`board:${card.board}`).emit('attachment-removed', {
-      cardId: card._id,
-      attachmentId: attachment._id,
-      activity
-    });
-  }
 }
 
-module.exports = new SocketService(); 
+module.exports = new SocketService();

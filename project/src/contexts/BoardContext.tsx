@@ -160,12 +160,27 @@ export const BoardProvider: React.FC<BoardProviderProps> = ({ children }) => {
 
   const fetchBoard = async (boardId: string): Promise<Board> => {
     try {
+      if (!boardId) {
+        throw new Error('Board ID is missing');
+      }
+
+      // First try to find the board in the local state
       let board: Board | undefined = boards.find((b: Board) => b.id === boardId);
       
+      // If not found locally, fetch from API
       if (!board) {
-        const fetchedBoard = await apiGetBoard(boardId);
-        setBoards(prev => [...prev, fetchedBoard]);
-        board = fetchedBoard;
+        try {
+          const fetchedBoard = await apiGetBoard(boardId);
+          if (!fetchedBoard) {
+            throw new Error('Board not found');
+          }
+          // Add to local state
+          setBoards(prev => [...prev, fetchedBoard]);
+          board = fetchedBoard;
+        } catch (error) {
+          console.error('Error fetching board from API:', error);
+          throw new Error('Failed to fetch board');
+        }
       }
       
       if (!board) {
@@ -176,6 +191,7 @@ export const BoardProvider: React.FC<BoardProviderProps> = ({ children }) => {
       return board;
     } catch (error) {
       console.error('Error fetching board:', error);
+      setCurrentBoard(null);
       throw error;
     }
   };
