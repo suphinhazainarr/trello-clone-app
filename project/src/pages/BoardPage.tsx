@@ -171,57 +171,66 @@ const BoardPage: React.FC = () => {
       {/* Board Content */}
       <div className="p-4 overflow-x-auto">
         <DragDropContext onDragEnd={handleDragEnd}>
-          <div className="flex space-x-4 min-h-full pb-4">
-            {currentBoard.lists.map((list) => (
-              <BoardList
-                key={list.id}
-                list={list}
-                onCardClick={(cardId) => setSelectedCard(cardId)}
-              />
-            ))}
-
-            {/* Add List */}
-            <div className="min-w-72 flex-shrink-0">
-              {showAddList ? (
-                <div className="bg-gray-100 rounded-lg p-3">
-                  <input
-                    type="text"
-                    value={newListTitle}
-                    onChange={(e) => setNewListTitle(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleAddList()}
-                    placeholder="Enter list title..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-2"
-                    autoFocus
+          <Droppable droppableId="board-lists" type="list" direction="horizontal">
+            {(provided, snapshot) => (
+              <div 
+                ref={provided.innerRef}
+                {...provided.droppableProps}
+                className="flex space-x-4 min-h-full pb-4"
+              >
+                {currentBoard.lists.map((list) => (
+                  <BoardList
+                    key={list.id}
+                    list={list}
+                    onCardClick={(cardId) => setSelectedCard(cardId)}
                   />
-                  <div className="flex items-center space-x-2">
+                ))}
+
+                {/* Add List */}
+                <div className="min-w-72 flex-shrink-0">
+                  {showAddList ? (
+                    <div className="bg-gray-100 rounded-lg p-3">
+                      <input
+                        type="text"
+                        value={newListTitle}
+                        onChange={(e) => setNewListTitle(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && handleAddList()}
+                        placeholder="Enter list title..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-2"
+                        autoFocus
+                      />
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={handleAddList}
+                          className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors"
+                        >
+                          Add list
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowAddList(false);
+                            setNewListTitle('');
+                          }}
+                          className="text-gray-600 hover:text-gray-800 px-3 py-1 rounded text-sm transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
                     <button
-                      onClick={handleAddList}
-                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors"
+                      onClick={() => setShowAddList(true)}
+                      className="w-full bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-lg p-3 flex items-center space-x-2 transition-colors"
                     >
-                      Add list
+                      <Plus className="h-4 w-4" />
+                      <span>Add another list</span>
                     </button>
-                    <button
-                      onClick={() => {
-                        setShowAddList(false);
-                        setNewListTitle('');
-                      }}
-                      className="text-gray-600 hover:text-gray-800 px-3 py-1 rounded text-sm transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
+                  )}
                 </div>
-              ) : (
-                <button
-                  onClick={() => setShowAddList(true)}
-                  className="w-full bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-lg p-3 flex items-center space-x-2 transition-colors"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Add another list</span>
-                </button>
-              )}
-            </div>
-          </div>
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
         </DragDropContext>
       </div>
 

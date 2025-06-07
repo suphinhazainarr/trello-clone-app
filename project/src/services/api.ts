@@ -50,8 +50,29 @@ export const createBoard = async (data: { title: string; background: string }) =
 };
 
 export const getBoards = async () => {
-  const response = await api.get('/boards');
-  return response.data;
+  try {
+    console.log('Fetching boards from API...');
+    const response = await api.get('/boards');
+    console.log('API response:', response);
+    if (!response.data) {
+      console.error('No data received from API');
+      return [];
+    }
+    // Ensure we have valid board data
+    const boards = response.data.map((board: any) => ({
+      ...board,
+      id: board.id || board._id, // Handle both id formats
+      lists: board.lists || [],
+      members: board.members || [],
+      visibility: board.visibility || 'private',
+      background: board.background || '#026AA7'
+    }));
+    console.log('Processed boards:', boards);
+    return boards;
+  } catch (error) {
+    console.error('Error fetching boards:', error);
+    return [];
+  }
 };
 
 export const getBoard = async (boardId: string): Promise<Board> => {
@@ -82,11 +103,22 @@ export const deleteBoard = async (id: string) => {
 
 // List API calls
 export const createList = async (boardId: string, data: { title: string }) => {
-  if (!boardId || boardId === 'undefined') {
-    throw new Error('Invalid board ID');
+  try {
+    if (!boardId || boardId === 'undefined') {
+      throw new Error('Invalid board ID');
+    }
+    if (!data.title || !data.title.trim()) {
+      throw new Error('List title is required');
+    }
+
+    console.log('Creating list:', { boardId, data });
+    const response = await api.post(`/boards/${boardId}/lists`, data);
+    console.log('List created:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Error creating list:', error);
+    throw new Error('Error creating list: ' + (error?.message || 'Unknown error'));
   }
-  const response = await api.post(`/boards/${boardId}/lists`, data);
-  return response.data;
 };
 
 export const updateList = async (id: string, data: any) => {
@@ -100,6 +132,13 @@ export const deleteList = async (id: string) => {
 
 // Card API calls
 export const createCard = async (listId: string, data: { title: string }) => {
+  if (!listId || listId === 'undefined') {
+    throw new Error('Invalid list ID');
+  }
+  if (!data.title || !data.title.trim()) {
+    throw new Error('Card title is required');
+  }
+  
   const response = await api.post(`/lists/${listId}/cards`, data);
   return response.data;
 };

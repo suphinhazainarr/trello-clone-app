@@ -24,11 +24,13 @@ const Dashboard: React.FC = () => {
     dueDateRange: null
   });
 
-  const starredBoards = boards.filter((board: Board) => board.isStarred);
-  const recentBoards = boards.slice(0, 4);
-  const allBoards = boards;
+  // Filter out invalid boards
+  const validBoards = boards.filter((board: Board) => board && board.id && board.id !== 'undefined');
+  const starredBoards = validBoards.filter((board: Board) => board.isStarred);
+  const recentBoards = validBoards.slice(0, 4);
+  const allBoards = validBoards;
 
-  const filteredBoards = boards.filter(board =>
+  const filteredBoards = validBoards.filter(board =>
     board.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -197,9 +199,9 @@ const Dashboard: React.FC = () => {
           <div className="mb-8">
             <h2 className="text-lg font-semibold mb-4">🕒 Recent Boards</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {recentBoards.map((board: Board) => (
+              {recentBoards.map((board: Board, index: number) => (
                 <Link
-                  key={`recent-${board.id}`}
+                  key={`recent-${board.id}-${index}`}
                   to={`/board/${board.id}`}
                   className="block p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
                   style={{ backgroundColor: board.background }}
@@ -226,9 +228,9 @@ const Dashboard: React.FC = () => {
           <div>
             <h2 className="text-lg font-semibold mb-4">📋 All Boards</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {allBoards.map((board: Board) => (
+              {allBoards.map((board: Board, index: number) => (
                 <Link
-                  key={`all-${board.id}`}
+                  key={`all-${board.id}-${index}`}
                   to={`/board/${board.id}`}
                   className="block p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
                   style={{ backgroundColor: board.background }}

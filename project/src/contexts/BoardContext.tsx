@@ -82,9 +82,16 @@ export const BoardProvider: React.FC<BoardProviderProps> = ({ children }) => {
   const { token } = useAuth();
 
   useEffect(() => {
+    console.log('Current boards state:', boards);
+  }, [boards]);
+
+  useEffect(() => {
     if (token) {
+      console.log('Token found, loading boards...');
       loadBoards();
       socketService.connect();
+    } else {
+      console.log('No token found, skipping board load');
     }
     return () => {
       socketService.disconnect();
@@ -145,7 +152,9 @@ export const BoardProvider: React.FC<BoardProviderProps> = ({ children }) => {
 
   const loadBoards = async () => {
     try {
+      console.log('Loading boards...');
       const data = await getBoards();
+      console.log('Boards loaded from API:', data);
       setBoards(data);
       if (currentBoard) {
         const updatedCurrentBoard = data.find((board: { id: string; }) => board.id === currentBoard.id);
@@ -160,30 +169,33 @@ export const BoardProvider: React.FC<BoardProviderProps> = ({ children }) => {
 
   const fetchBoard = async (boardId: string): Promise<Board> => {
     try {
-      if (!boardId) {
-        throw new Error('Board ID is missing');
+      if (!boardId || boardId === 'undefined') {
+        throw new Error('Board ID is missing or invalid');
       }
 
       // First try to find the board in the local state
-      let board: Board | undefined = boards.find((b: Board) => b.id === boardId);
+      let board: Board | undefined = boards.find((b: Board) => b && b.id === boardId);
       
-      // If not found locally, fetch from API
-      if (!board) {
+      // If not found locally or if the board data is invalid, fetch from API
+      if (!board || !board.id || board.id === 'undefined') {
         try {
           const fetchedBoard = await apiGetBoard(boardId);
-          if (!fetchedBoard) {
-            throw new Error('Board not found');
+          if (!fetchedBoard || !fetchedBoard.id) {
+            throw new Error('Invalid board data received from server');
           }
-          // Add to local state
-          setBoards(prev => [...prev, fetchedBoard]);
+          // Add to local state if not already present
+          setBoards(prev => {
+            const exists = prev.some(b => b.id === fetchedBoard.id);
+            return exists ? prev : [...prev, fetchedBoard];
+          });
           board = fetchedBoard;
         } catch (error) {
           console.error('Error fetching board from API:', error);
-          throw new Error('Failed to fetch board');
+          throw error;
         }
       }
       
-      if (!board) {
+      if (!board || !board.id) {
         throw new Error('Board not found');
       }
       
@@ -280,7 +292,20 @@ export const BoardProvider: React.FC<BoardProviderProps> = ({ children }) => {
 
   const addCard = async (listId: string, title: string): Promise<void> => {
     try {
-      const newCard = await apiCreateCard(listId, { title });
+      if (!listId || listId === 'undefined') {
+        throw new Error('Invalid list ID');
+      }
+      if (!title || !title.trim()) {
+        throw new Error('Card title is required');
+      }
+
+      // Verify the list exists in the current board
+      const listExists = currentBoard?.lists.some(list => list.id === listId);
+      if (!listExists) {
+        throw new Error('List not found in current board');
+      }
+
+      const newCard = await apiCreateCard(listId, { title: title.trim() });
       setBoards(prev => prev.map(board => ({
         ...board,
         lists: board.lists.map(list => 

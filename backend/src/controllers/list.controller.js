@@ -5,7 +5,7 @@ const socketService = require('../services/socket.service');
 // Create a new list
 exports.createList = async (req, res) => {
   try {
-    const { title, position } = req.body;
+    const { title } = req.body;
     const boardId = req.params.boardId;
 
     // Check if user has access to the board
@@ -21,16 +21,28 @@ exports.createList = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    // Get the highest position value from existing lists
+    const lastList = await List.findOne({ board: boardId })
+      .sort('-position')
+      .select('position');
+
+    // Set the new list's position
+    const position = lastList ? lastList.position + 1 : 0;
+
     const list = await List.create({
       title,
       position,
       board: boardId
     });
 
-    await socketService.emitListCreated(list, req.user._id);
+    // Populate the list with its board reference
+    const populatedList = await List.findById(list._id).populate('board');
 
-    res.status(201).json(list);
+    await socketService.emitListCreated(populatedList, req.user._id);
+
+    res.status(201).json(populatedList);
   } catch (error) {
+    console.error('Error creating list:', error);
     res.status(500).json({ message: 'Error creating list', error: error.message });
   }
 };

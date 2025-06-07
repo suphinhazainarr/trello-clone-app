@@ -51,16 +51,67 @@ exports.createBoard = async (req, res) => {
 // Get all boards for the current user
 exports.getBoards = async (req, res) => {
   try {
+    console.log('Fetching boards for user:', req.user._id);
     const boards = await Board.find({
       $or: [
         { owner: req.user._id },
         { 'members.user': req.user._id }
       ]
-    }).populate('owner', 'name email')
-      .populate('members.user', 'name email');
+    })
+    .populate('owner', 'name email')
+    .populate('members.user', 'name email')
+    .populate({
+      path: 'lists',
+      populate: {
+        path: 'cards',
+        populate: [
+          { path: 'members', select: 'name email' },
+          { path: 'comments.author', select: 'name email' }
+        ]
+      }
+    });
 
-    res.json(boards);
+    console.log('Found boards:', boards);
+
+    // Format the boards data
+    const formattedBoards = boards.map(board => ({
+      id: board._id.toString(),
+      title: board.title,
+      background: board.background || '#026AA7',
+      owner: {
+        id: board.owner._id.toString(),
+        name: board.owner.name,
+        email: board.owner.email
+      },
+      members: board.members.map(member => ({
+        id: member.user._id.toString(),
+        name: member.user.name,
+        email: member.user.email,
+        role: member.role
+      })),
+      lists: (board.lists || []).map(list => ({
+        id: list._id.toString(),
+        title: list.title,
+        cards: (list.cards || []).map(card => ({
+          id: card._id.toString(),
+          title: card.title,
+          description: card.description,
+          members: card.members.map(m => m._id.toString()),
+          labels: card.labels || [],
+          dueDate: card.dueDate,
+          position: card.position
+        }))
+      })),
+      visibility: board.visibility || 'private',
+      isStarred: board.isStarred || false,
+      createdAt: board.createdAt,
+      updatedAt: board.updatedAt
+    }));
+
+    console.log('Formatted boards:', formattedBoards);
+    res.json(formattedBoards);
   } catch (error) {
+    console.error('Error fetching boards:', error);
     res.status(500).json({ message: 'Error fetching boards', error: error.message });
   }
 };
