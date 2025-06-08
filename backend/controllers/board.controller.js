@@ -2,18 +2,20 @@ exports.getBoard = async (req, res) => {
   try {
     console.log('Fetching board with ID:', req.params.id);
     const board = await Board.findById(req.params.id)
+      .populate('owner', 'name email')
+      .populate('members.user', 'name email')
       .populate({
         path: 'lists',
         populate: {
           path: 'cards',
           model: 'Card',
           populate: [
-            { path: 'members', model: 'User', select: 'name email avatar' },
-            { path: 'labels' }
+            { path: 'members', select: 'name email' },
+            { path: 'labels' },
+            { path: 'comments.user', select: 'name email' }
           ]
         }
       })
-      .populate('members', 'name email avatar')
       .lean();
 
     if (!board) {
@@ -81,7 +83,8 @@ exports.getBoards = async (req, res) => {
         model: 'Card',
         populate: [
           { path: 'members', model: 'User', select: 'name email' },
-          { path: 'labels' }
+          { path: 'labels' },
+          { path: 'comments.user', model: 'User', select: 'name email' }
         ]
       }
     })

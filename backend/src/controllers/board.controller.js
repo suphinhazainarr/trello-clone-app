@@ -64,9 +64,11 @@ exports.getBoards = async (req, res) => {
       path: 'lists',
       populate: {
         path: 'cards',
+        model: 'Card',
         populate: [
-          { path: 'members', select: 'name email' },
-          { path: 'comments.author', select: 'name email' }
+          { path: 'members', model: 'User', select: 'name email' },
+          { path: 'labels' },
+          { path: 'comments.user', model: 'User', select: 'name email' }
         ]
       }
     });
@@ -134,7 +136,8 @@ exports.getBoard = async (req, res) => {
           path: 'cards',
           populate: [
             { path: 'members', select: 'name email' },
-            { path: 'comments.author', select: 'name email' }
+            { path: 'labels' },
+            { path: 'comments.user', select: 'name email' }
           ]
         }
       });

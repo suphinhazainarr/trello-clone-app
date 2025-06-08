@@ -13,6 +13,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -28,29 +29,48 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!token);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    if (storedToken) {
-      setToken(storedToken);
-      setIsAuthenticated(true);
-      fetchUser(storedToken);
-    }
+    const initializeAuth = async () => {
+      const storedToken = localStorage.getItem('token');
+      
+      if (storedToken) {
+        try {
+          // Set up axios default authorization header
+          axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+          
+          // Verify token by fetching user data
+          const response = await axios.get('http://localhost:5000/api/auth/profile');
+          
+          setToken(storedToken);
+          setUser(response.data);
+          setIsAuthenticated(true);
+        } catch (error) {
+          // If token is invalid or expired, clear everything
+          console.error('Token validation error:', error);
+          localStorage.removeItem('token');
+          delete axios.defaults.headers.common['Authorization'];
+          setToken(null);
+          setUser(null);
+          setIsAuthenticated(false);
+        }
+      }
+      
+      setLoading(false);
+    };
+
+    initializeAuth();
   }, []);
 
-  const fetchUser = async (authToken: string) => {
-    try {
-      const response = await axios.get('http://localhost:5000/api/users/me', {
-        headers: {
-          Authorization: `Bearer ${authToken}`
-        }
-      });
-      setUser(response.data);
-    } catch (error) {
-      console.error('Error fetching user:', error);
-      handleLogout();
-    }
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    delete axios.defaults.headers.common['Authorization'];
+    setToken(null);
+    setUser(null);
+    setIsAuthenticated(false);
+    window.location.href = '/login';
   };
 
   const handleLogin = async (email: string, password: string): Promise<boolean> => {
@@ -62,7 +82,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const { token: newToken, user: userData } = response.data;
       
+      // Store token first
       localStorage.setItem('token', newToken);
+      
+      // Set up axios default authorization header
+      axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+      
+      // Update state
       setToken(newToken);
       setUser(userData);
       setIsAuthenticated(true);
@@ -74,14 +100,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    setToken(null);
-    setUser(null);
-    setIsAuthenticated(false);
-    window.location.href = '/login';
-  };
-
   return (
     <AuthContext.Provider
       value={{
@@ -89,7 +107,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         login: handleLogin,
         logout: handleLogout,
-        isAuthenticated
+        isAuthenticated,
+        loading
       }}
     >
       {children}
