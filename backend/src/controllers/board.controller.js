@@ -75,33 +75,33 @@ exports.getBoards = async (req, res) => {
 
     // Format the boards data
     const formattedBoards = boards.map(board => ({
-      id: board._id.toString(),
+      id: board._id?.toString() || '',
       title: board.title,
       background: board.background || '#026AA7',
-      owner: {
+      owner: board.owner && board.owner._id ? {
         id: board.owner._id.toString(),
         name: board.owner.name,
         email: board.owner.email
-      },
-      members: board.members.map(member => ({
+      } : null,
+      members: Array.isArray(board.members) ? board.members.filter(m => m && m.user && m.user._id).map(member => ({
         id: member.user._id.toString(),
         name: member.user.name,
         email: member.user.email,
         role: member.role
-      })),
-      lists: (board.lists || []).map(list => ({
+      })) : [],
+      lists: Array.isArray(board.lists) ? board.lists.filter(l => l && l._id).map(list => ({
         id: list._id.toString(),
         title: list.title,
-        cards: (list.cards || []).map(card => ({
+        cards: Array.isArray(list.cards) ? list.cards.filter(c => c && c._id).map(card => ({
           id: card._id.toString(),
           title: card.title,
           description: card.description,
-          members: card.members.map(m => m._id.toString()),
+          members: Array.isArray(card.members) ? card.members.filter(m => m && m._id).map(m => m._id.toString()) : [],
           labels: card.labels || [],
           dueDate: card.dueDate,
           position: card.position
-        }))
-      })),
+        })) : []
+      })) : [],
       visibility: board.visibility || 'private',
       isStarred: board.isStarred || false,
       createdAt: board.createdAt,

@@ -11,13 +11,15 @@ import { Board, User } from '../types';
 const BoardPage: React.FC = () => {
   const { boardId } = useParams<{ boardId: string }>();
   const navigate = useNavigate();
-  const { boards, currentBoard, addList, moveCard, fetchBoard, setCurrentBoard } = useBoard();
+  const { currentBoard, addList, moveCard, fetchBoard, setCurrentBoard, updateBoard } = useBoard();
   const [showAddList, setShowAddList] = useState(false);
   const [newListTitle, setNewListTitle] = useState('');
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
+  // Handle initial board load
   useEffect(() => {
     const loadBoard = async () => {
       if (!boardId) {
@@ -27,10 +29,17 @@ const BoardPage: React.FC = () => {
         return;
       }
 
+      // Skip if we already have the correct board loaded
+      if (!isInitialLoad && currentBoard?.id === boardId) {
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         setError(null);
         await fetchBoard(boardId);
+        setIsInitialLoad(false);
       } catch (err) {
         console.error('Error loading board:', err);
         setError(err instanceof Error ? err.message : 'Failed to load board');
@@ -44,9 +53,11 @@ const BoardPage: React.FC = () => {
 
     // Clean up function
     return () => {
-      setCurrentBoard(null);
+      if (boardId !== currentBoard?.id) {
+        setCurrentBoard(null);
+      }
     };
-  }, [boardId, fetchBoard, navigate, setCurrentBoard]);
+  }, [boardId, isInitialLoad]); // Only depend on boardId and isInitialLoad
 
   const handleAddList = async () => {
     if (!newListTitle.trim() || !currentBoard) {
@@ -64,7 +75,7 @@ const BoardPage: React.FC = () => {
   };
 
   const handleDragEnd = (result: DropResult) => {
-    const { destination, source, draggableId } = result;
+    const { destination, source, draggableId, type } = result;
 
     if (!destination || !currentBoard) {
       return;
@@ -77,6 +88,22 @@ const BoardPage: React.FC = () => {
       return;
     }
 
+    // Handle list reordering
+    if (type === 'list') {
+      const newLists = Array.from(currentBoard.lists);
+      const [removed] = newLists.splice(source.index, 1);
+      newLists.splice(destination.index, 0, removed);
+
+      const updatedBoard = {
+        ...currentBoard,
+        lists: newLists
+      };
+
+      updateBoard(updatedBoard);
+      return;
+    }
+
+    // Handle card moving
     moveCard(
       draggableId,
       source.droppableId,
@@ -147,12 +174,12 @@ const BoardPage: React.FC = () => {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <div className="flex -space-x-2">
-                {currentBoard.members.slice(0, 3).map((memberId, index) => (
+                {currentBoard.members.slice(0, 3).map((member, index) => (
                   <div
-                    key={memberId}
+                    key={member.user?.id || index}
                     className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-medium border-2 border-white"
                   >
-                    U{index + 1}
+                    {member.user?.name?.[0] || `U${index + 1}`}
                   </div>
                 ))}
               </div>
@@ -178,12 +205,22 @@ const BoardPage: React.FC = () => {
                 {...provided.droppableProps}
                 className="flex space-x-4 min-h-full pb-4"
               >
-                {currentBoard.lists.map((list) => (
-                  <BoardList
-                    key={list.id}
-                    list={list}
-                    onCardClick={(cardId) => setSelectedCard(cardId)}
-                  />
+                {currentBoard.lists.map((list, index) => (
+                  <Draggable key={list.id} draggableId={list.id} index={index}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        {...provided.dragHandleProps}
+                        className="min-w-72 flex-shrink-0"
+                      >
+                        <BoardList
+                          list={list}
+                          onCardClick={(cardId) => setSelectedCard(cardId)}
+                        />
+                      </div>
+                    )}
+                  </Draggable>
                 ))}
 
                 {/* Add List */}

@@ -1,5 +1,94 @@
 import axios from 'axios';
-import { Board } from '../types';
+import type { Board, Card, List, User, Label, ChecklistItem, Comment, Attachment, Activity, BoardMember } from '../types';
+
+// API Response Types
+type ApiUser = {
+  _id?: string;
+  id?: string;
+  name: string;
+  email: string;
+  avatar?: string;
+};
+
+type ApiLabel = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+type ApiComment = {
+  id: string;
+  text: string;
+  user: ApiUser;
+  createdAt: string;
+};
+
+type ApiAttachment = {
+  id: string;
+  name: string;
+  url: string;
+  type: string;
+};
+
+type ApiChecklistItem = {
+  id: string;
+  text: string;
+  isCompleted: boolean;
+};
+
+type ApiCard = {
+  _id?: string;
+  id?: string;
+  title: string;
+  description: string;
+  position: number;
+  listId: string;
+  list?: string;
+  members: ApiUser[];
+  labels: ApiLabel[];
+  dueDate?: string;
+  checklist: ApiChecklistItem[];
+  comments: ApiComment[];
+  attachments: ApiAttachment[];
+};
+
+type ApiList = {
+  _id?: string;
+  id?: string;
+  title: string;
+  position: number;
+  boardId: string;
+  cards: ApiCard[];
+};
+
+type ApiActivity = {
+  id: string;
+  text: string;
+  date: string;
+  user: ApiUser;
+};
+
+type ApiBoardMember = {
+  user: ApiUser;
+  role: 'admin' | 'member';
+};
+
+type ApiBoard = {
+  _id?: string;
+  id?: string;
+  title: string;
+  description: string;
+  background: string;
+  visibility: 'private' | 'public';
+  isStarred: boolean;
+  position: number;
+  lists: ApiList[];
+  members: ApiBoardMember[];
+  owner: ApiUser;
+  activity: ApiActivity[];
+  createdAt: string;
+  updatedAt: string;
+};
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -13,7 +102,7 @@ const api = axios.create({
 
 // Add token to requests
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('trello-token');
+  const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -24,6 +113,12 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid, redirect to login
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+      return Promise.reject(new Error('Authentication required. Please log in.'));
+    }
     if (error.response) {
       // Server responded with error
       console.error('API Error:', {
@@ -43,58 +138,242 @@ api.interceptors.response.use(
   }
 );
 
-// Board API calls
-export const createBoard = async (data: { title: string; background: string }) => {
-  const response = await api.post('/boards', data);
-  return response.data;
+// Transform API types to frontend types
+const transformUser = (apiUser: ApiUser): User => {
+  if (!apiUser) {
+    console.error('Invalid user data received:', apiUser);
+    return {
+      id: 'unknown',
+      name: 'Unknown User',
+      email: 'unknown@example.com',
+      avatar: undefined
+    };
+  }
+  return {
+    id: apiUser._id?.toString() || apiUser.id?.toString() || 'unknown',
+    name: apiUser.name || 'Unknown User',
+    email: apiUser.email || 'unknown@example.com',
+    avatar: apiUser.avatar
+  };
 };
 
-export const getBoards = async () => {
+const transformLabel = (apiLabel: ApiLabel): Label => ({
+  id: apiLabel.id,
+  name: apiLabel.name,
+  color: apiLabel.color
+});
+
+const transformChecklistItem = (apiItem: ApiChecklistItem): ChecklistItem => ({
+  id: apiItem.id,
+  text: apiItem.text,
+  isCompleted: apiItem.isCompleted
+});
+
+const transformComment = (apiComment: ApiComment): Comment => ({
+  id: apiComment.id,
+  text: apiComment.text,
+  user: transformUser(apiComment.user),
+  createdAt: apiComment.createdAt
+});
+
+const transformAttachment = (apiAttachment: ApiAttachment): Attachment => ({
+  id: apiAttachment.id,
+  name: apiAttachment.name,
+  url: apiAttachment.url,
+  type: apiAttachment.type
+});
+
+const transformCard = (apiCard: ApiCard): Card => ({
+  id: apiCard._id?.toString() || apiCard.id?.toString() || 'unknown',
+  title: apiCard.title || 'Untitled Card',
+  description: apiCard.description || '',
+  position: Number(apiCard.position) || 0,
+  listId: apiCard.listId || apiCard.list?.toString() || '',
+  members: Array.isArray(apiCard.members) ? apiCard.members.map(transformUser) : [],
+  labels: Array.isArray(apiCard.labels) ? apiCard.labels.map(label => label.id) : [],
+  dueDate: apiCard.dueDate,
+  checklist: Array.isArray(apiCard.checklist) ? apiCard.checklist.map(transformChecklistItem) : [],
+  comments: Array.isArray(apiCard.comments) ? apiCard.comments.map(transformComment) : [],
+  attachments: Array.isArray(apiCard.attachments) ? apiCard.attachments.map(attachment => attachment.url) : []
+});
+
+const transformList = (apiList: any): List => ({
+  id: apiList._id?.toString() || apiList.id?.toString() || 'unknown',
+  title: apiList.title || 'Untitled List',
+  position: Number(apiList.position) || 0,
+  boardId: apiList.board?._id?.toString() || apiList.boardId?.toString() || '',
+  cards: (apiList.cards || []).map(transformCard)
+});
+
+const transformActivity = (apiActivity: ApiActivity): Activity => ({
+  id: apiActivity.id,
+  text: apiActivity.text,
+  date: apiActivity.date,
+  user: transformUser(apiActivity.user)
+});
+
+const transformBoardMember = (apiMember: any): BoardMember => {
+  if (!apiMember) {
+    console.error('Invalid board member data received:', apiMember);
+    return {
+      user: transformUser({
+        name: 'Unknown User',
+        email: 'unknown@example.com'
+      }),
+      role: 'member'
+    };
+  }
+
+  // Handle flat member format (where user fields are directly on the member object)
+  if (apiMember.name && apiMember.email) {
+    return {
+      user: transformUser({
+        id: apiMember.id,
+        name: apiMember.name,
+        email: apiMember.email,
+        avatar: apiMember.avatar
+      }),
+      role: apiMember.role || 'member'
+    };
+  }
+
+  // Handle nested user format
+  if (apiMember.user) {
+    return {
+      user: transformUser(apiMember.user),
+      role: apiMember.role || 'member'
+    };
+  }
+
+  // Fallback for unknown format
+  console.error('Unknown member format:', apiMember);
+  return {
+    user: transformUser({
+      name: 'Unknown User',
+      email: 'unknown@example.com'
+    }),
+    role: 'member'
+  };
+};
+
+const transformBoard = (apiBoard: ApiBoard): Board => {
+  console.log('Transforming board data:', apiBoard);
+  
+  if (!apiBoard) {
+    console.error('Invalid board data received');
+    throw new Error('Invalid board data received');
+  }
+
   try {
-    console.log('Fetching boards from API...');
+    // Create a base board with required fields and safe defaults
+    const board: Board = {
+      id: apiBoard._id?.toString() || apiBoard.id?.toString() || 'unknown',
+      title: apiBoard.title || 'Untitled Board',
+      description: apiBoard.description || '',
+      background: apiBoard.background || '#026AA7',
+      visibility: apiBoard.visibility || 'private',
+      isStarred: !!apiBoard.isStarred,
+      position: Number(apiBoard.position) || 0,
+      lists: [],
+      members: [],
+      owner: transformUser(apiBoard.owner || { name: 'Unknown', email: 'unknown@example.com' }),
+      activity: [],
+      createdAt: apiBoard.createdAt || new Date().toISOString(),
+      updatedAt: apiBoard.updatedAt || new Date().toISOString()
+    };
+
+    // Safely transform arrays with null checks
+    if (Array.isArray(apiBoard.lists)) {
+      board.lists = apiBoard.lists.map(list => transformList(list)).filter(Boolean);
+    }
+
+    if (Array.isArray(apiBoard.members)) {
+      board.members = apiBoard.members.map(member => transformBoardMember(member)).filter(Boolean);
+    }
+
+    if (Array.isArray(apiBoard.activity)) {
+      board.activity = apiBoard.activity.map(activity => transformActivity(activity)).filter(Boolean);
+    }
+
+    return board;
+  } catch (error) {
+    console.error('Error transforming board:', error, 'Board data:', apiBoard);
+    throw error;
+  }
+};
+
+// Board API calls
+export const createBoard = async (data: { title: string; background: string }): Promise<Board> => {
+  const response = await api.post('/boards', {
+    ...data,
+    position: 65535 // Default to end of list
+  });
+  return transformBoard(response.data);
+};
+
+export const getBoards = async (): Promise<Board[]> => {
+  try {
+    console.log('API: Fetching boards...');
     const response = await api.get('/boards');
-    console.log('API response:', response);
-    if (!response.data) {
-      console.error('No data received from API');
+    console.log('API: Raw boards response:', JSON.stringify(response.data, null, 2));
+
+    if (!Array.isArray(response.data)) {
+      console.error('API: Invalid boards data received - not an array:', response.data);
       return [];
     }
-    // Ensure we have valid board data
-    const boards = response.data.map((board: any) => ({
-      ...board,
-      id: board.id || board._id, // Handle both id formats
-      lists: board.lists || [],
-      members: board.members || [],
-      visibility: board.visibility || 'private',
-      background: board.background || '#026AA7'
-    }));
-    console.log('Processed boards:', boards);
-    return boards;
+
+    // Transform the boards data with safe fallbacks
+    const transformedBoards = response.data
+      .map((board: ApiBoard): Board | null => {
+        try {
+          return transformBoard(board);
+        } catch (error) {
+          console.error('Error transforming board:', error, 'Board data:', board);
+          return null;
+        }
+      })
+      .filter((board): board is Board => board !== null);
+
+    console.log('API: Transformed boards:', transformedBoards);
+    return transformedBoards;
   } catch (error) {
-    console.error('Error fetching boards:', error);
-    return [];
+    console.error('API: Error fetching boards:', error);
+    throw error;
   }
 };
 
-export const getBoard = async (boardId: string): Promise<Board> => {
-  if (!boardId || boardId === 'undefined') {
-    throw new Error('Invalid board ID');
+export const apiGetBoard = async (boardId: string): Promise<Board> => {
+  try {
+    console.log('API: Fetching board', boardId);
+    const response = await api.get(`/boards/${boardId}`);
+    console.log('API: Raw board response:', JSON.stringify(response.data, null, 2));
+    
+    const board = response.data;
+    if (!board) {
+      throw new Error('No board data received');
+    }
+
+    if (!board._id && !board.id) {
+      console.error('Invalid board data - missing ID:', board);
+      throw new Error('Invalid board data - missing ID');
+    }
+
+    return transformBoard(board);
+  } catch (error) {
+    console.error('API: Error fetching board:', error);
+    throw error;
   }
-  const response = await api.get(`/boards/${boardId}`);
-  if (!response.data) {
-    throw new Error('Board not found');
-  }
-  return response.data;
 };
 
-export const updateBoard = async (id: string, data: any) => {
+export const updateBoard = async (id: string, data: Partial<Board>): Promise<Board> => {
   if (!id || id === 'undefined') {
     throw new Error('Invalid board ID');
   }
   const response = await api.patch(`/boards/${id}`, data);
-  return response.data;
+  return transformBoard(response.data);
 };
 
-export const deleteBoard = async (id: string) => {
+export const deleteBoard = async (id: string): Promise<void> => {
   if (!id || id === 'undefined') {
     throw new Error('Invalid board ID');
   }
@@ -102,7 +381,7 @@ export const deleteBoard = async (id: string) => {
 };
 
 // List API calls
-export const createList = async (boardId: string, data: { title: string }) => {
+export const createList = async (boardId: string, data: { title: string }): Promise<List> => {
   try {
     if (!boardId || boardId === 'undefined') {
       throw new Error('Invalid board ID');
@@ -112,51 +391,61 @@ export const createList = async (boardId: string, data: { title: string }) => {
     }
 
     console.log('Creating list:', { boardId, data });
-    const response = await api.post(`/boards/${boardId}/lists`, data);
+    const response = await api.post(`/boards/${boardId}/lists`, {
+      ...data,
+      position: 65535 // Default to end of list
+    });
     console.log('List created:', response.data);
-    return response.data;
+    
+    return transformList(response.data);
   } catch (error: any) {
     console.error('Error creating list:', error);
     throw new Error('Error creating list: ' + (error?.message || 'Unknown error'));
   }
 };
 
-export const updateList = async (id: string, data: any) => {
+export const updateList = async (id: string, data: Partial<List>): Promise<List> => {
   const response = await api.patch(`/lists/${id}`, data);
-  return response.data;
+  return transformList(response.data);
 };
 
-export const deleteList = async (id: string) => {
+export const deleteList = async (id: string): Promise<void> => {
   await api.delete(`/lists/${id}`);
 };
 
 // Card API calls
-export const createCard = async (listId: string, data: { title: string }) => {
-  if (!listId || listId === 'undefined') {
-    throw new Error('Invalid list ID');
+export const apiCreateCard = async (listId: string, data: { title: string }): Promise<Card> => {
+  try {
+    console.log('API: Creating card for list', listId, 'with data:', data);
+    const response = await api.post(`/lists/${listId}/cards`, {
+      ...data,
+      listId,
+      position: 65535 // Default to end of list
+    });
+    console.log('API: Raw card response:', response.data);
+    
+    const card = response.data as ApiCard;
+    return transformCard(card);
+  } catch (error) {
+    console.error('API: Error creating card:', error);
+    throw error;
   }
-  if (!data.title || !data.title.trim()) {
-    throw new Error('Card title is required');
-  }
-  
-  const response = await api.post(`/lists/${listId}/cards`, data);
-  return response.data;
 };
 
-export const updateCard = async (id: string, data: any) => {
+export const updateCard = async (id: string, data: Partial<Card>): Promise<Card> => {
   const response = await api.patch(`/cards/${id}`, data);
-  return response.data;
+  return transformCard(response.data);
 };
 
-export const deleteCard = async (id: string) => {
+export const deleteCard = async (id: string): Promise<void> => {
   await api.delete(`/cards/${id}`);
 };
 
-export const moveCard = async (cardId: string, sourceListId: string, destListId: string, destIndex: number) => {
+export const moveCard = async (cardId: string, sourceListId: string, destListId: string, destIndex: number): Promise<Card> => {
   const response = await api.post(`/cards/${cardId}/move`, {
     sourceListId,
     destListId,
-    destIndex
+    position: destIndex * 65535 // Convert index to position
   });
-  return response.data;
+  return transformCard(response.data);
 }; 

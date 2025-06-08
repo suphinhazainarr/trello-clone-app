@@ -25,6 +25,11 @@ const BoardList: React.FC<BoardListProps> = ({ list, onCardClick }) => {
 
   const handleAddCard = () => {
     if (newCardTitle.trim()) {
+      console.log('Adding card to list:', { listId: list.id, title: newCardTitle.trim() });
+      if (!list.id) {
+        console.error('List ID is missing:', list);
+        return;
+      }
       addCard(list.id, newCardTitle.trim());
       setNewCardTitle('');
       setShowAddCard(false);
@@ -95,17 +100,17 @@ const BoardList: React.FC<BoardListProps> = ({ list, onCardClick }) => {
         </div>
 
         {/* Cards */}
-        <Droppable droppableId={list.id}>
+        <Droppable droppableId={`list-${list.id}`} type="card">
           {(provided, snapshot) => (
             <div
               ref={provided.innerRef}
               {...provided.droppableProps}
-              className={`space-y-2 min-h-1 ${
+              className={`space-y-2 min-h-12 ${
                 snapshot.isDraggingOver ? 'bg-blue-50 rounded-md' : ''
               }`}
             >
               {list.cards.map((card, index) => (
-                <Draggable key={card.id} draggableId={card.id} index={index}>
+                <Draggable key={card.id} draggableId={`card-${card.id}`} index={index}>
                   {(provided, snapshot) => (
                     <div
                       ref={provided.innerRef}
@@ -129,7 +134,7 @@ const BoardList: React.FC<BoardListProps> = ({ list, onCardClick }) => {
                         <div className="flex flex-wrap gap-1 mb-2">
                           {card.labels.map((label: string, idx: number) => (
                             <span
-                              key={idx}
+                              key={`${card.id}-label-${idx}`}
                               className={`${getLabelColor(label)} text-white text-xs px-2 py-1 rounded-full`}
                             >
                               {label}
@@ -180,7 +185,7 @@ const BoardList: React.FC<BoardListProps> = ({ list, onCardClick }) => {
                           <div className="flex -space-x-1">
                             {card.members.slice(0, 3).map((memberId: string, idx: number) => (
                               <div
-                                key={memberId}
+                                key={`${card.id}-member-${memberId}`}
                                 className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-medium border-2 border-white"
                               >
                                 U{idx + 1}

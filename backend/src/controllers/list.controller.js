@@ -35,6 +35,9 @@ exports.createList = async (req, res) => {
       board: boardId
     });
 
+    // Add the new list's ID to the board's lists array
+    await Board.findByIdAndUpdate(boardId, { $push: { lists: list._id } });
+
     // Populate the list with its board reference
     const populatedList = await List.findById(list._id).populate('board');
 

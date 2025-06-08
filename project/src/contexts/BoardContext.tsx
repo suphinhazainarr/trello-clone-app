@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { 
   createBoard as apiCreateBoard, 
@@ -8,11 +8,11 @@ import {
   createList as apiCreateList,
   updateList as apiUpdateList,
   deleteList as apiDeleteList,
-  createCard as apiCreateCard,
+  apiCreateCard,
   updateCard as apiUpdateCard,
   deleteCard as apiDeleteCard,
   moveCard as apiMoveCard,
-  getBoard as apiGetBoard
+  apiGetBoard
 } from '../services/api';
 import { Board, Card, List, User } from '../types';
 import { socketService } from '../services/socket.service';
@@ -81,9 +81,46 @@ export const BoardProvider: React.FC<BoardProviderProps> = ({ children }) => {
   const [currentBoard, setCurrentBoard] = useState<Board | null>(null);
   const { token } = useAuth();
 
-  useEffect(() => {
-    console.log('Current boards state:', boards);
-  }, [boards]);
+  // Memoize the fetchBoard function
+  const fetchBoard = useCallback(async (boardId: string): Promise<Board> => {
+    try {
+      if (!boardId || boardId === 'undefined') {
+        throw new Error('Board ID is missing or invalid');
+      }
+
+      console.log('Fetching board with ID:', boardId);
+      const fetchedBoard = await apiGetBoard(boardId);
+
+      if (!fetchedBoard || !fetchedBoard.id) {
+        throw new Error('Invalid board data received from server');
+      }
+
+      // Update boards list if needed
+      setBoards(prev => {
+        const boardIndex = prev.findIndex(b => b.id === fetchedBoard.id);
+        if (boardIndex === -1) {
+          return [...prev, fetchedBoard];
+        }
+        const newBoards = [...prev];
+        newBoards[boardIndex] = fetchedBoard;
+        return newBoards;
+      });
+      
+      setCurrentBoard(fetchedBoard);
+      return fetchedBoard;
+    } catch (error) {
+      console.error('Error fetching board:', error);
+      throw error;
+    }
+  }, []); // No dependencies needed as it only uses stable functions
+
+  // Memoize the setCurrentBoard function
+  const setCurrentBoardSafely = useCallback((board: Board | null) => {
+    setCurrentBoard(prev => {
+      if (prev?.id === board?.id) return prev;
+      return board;
+    });
+  }, []);
 
   useEffect(() => {
     if (token) {
@@ -92,135 +129,89 @@ export const BoardProvider: React.FC<BoardProviderProps> = ({ children }) => {
       socketService.connect();
     } else {
       console.log('No token found, skipping board load');
+      setBoards([]);
+      setCurrentBoard(null);
     }
     return () => {
       socketService.disconnect();
     };
   }, [token]);
 
+  // Separate useEffect for socket board events
   useEffect(() => {
-    if (currentBoard) {
-      socketService.joinBoard(currentBoard.id);
-      
-      const handleBoardEvent = (event: string, data: any) => {
-        switch (event) {
-          case 'updated':
-            setCurrentBoard(data);
-            setBoards(prev => prev.map(b => b.id === data.id ? data : b));
-            break;
-          case 'deleted':
-            if (data === currentBoard.id) {
-              setCurrentBoard(null);
-              setBoards(prev => prev.filter(b => b.id !== data));
-            }
-            break;
-          case 'listCreated':
-            if (currentBoard.id === data.boardId) {
-              setCurrentBoard(prev => prev ? {
-                ...prev,
-                lists: [...prev.lists, data]
-              } : null);
-            }
-            break;
-          case 'listUpdated':
-            if (currentBoard.id === data.boardId) {
-              setCurrentBoard(prev => prev ? {
-                ...prev,
-                lists: prev.lists.map(l => l.id === data.id ? data : l)
-              } : null);
-            }
-            break;
-          case 'listDeleted':
-            if (currentBoard.id === data.boardId) {
-              setCurrentBoard(prev => prev ? {
-                ...prev,
-                lists: prev.lists.filter(l => l.id !== data)
-              } : null);
-            }
-            break;
-          // Add more cases for other events as needed
-        }
-      };
+    if (!currentBoard?.id) return;
 
-      socketService.onBoardEvent(currentBoard.id, handleBoardEvent);
-      return () => {
-        socketService.leaveBoard(currentBoard.id);
-        socketService.offBoardEvent(currentBoard.id, handleBoardEvent);
-      };
-    }
-  }, [currentBoard]);
+    console.log(`Setting up socket listeners for board: ${currentBoard.id}`);
+    
+    // Join board room
+    socketService.joinBoard(currentBoard.id);
+
+    // Create event handler
+    const handleBoardEvent = (event: string, data: any) => {
+      console.log(`Board event received: ${event}`, data);
+      
+      // Skip user join/leave events to prevent loops
+      if (event === 'userJoined' || event === 'userLeft') {
+        return;
+      }
+
+      switch (event) {
+        case 'updated':
+          if (data?.id === currentBoard.id) {
+            setCurrentBoard(prev => prev?.id === data.id ? {...prev, ...data} : prev);
+            setBoards(prev => prev.map(b => b.id === data.id ? {...b, ...data} : b));
+          }
+          break;
+        case 'deleted':
+          if (data === currentBoard.id) {
+            setCurrentBoard(null);
+            setBoards(prev => prev.filter(b => b.id !== data));
+          }
+          break;
+        case 'listCreated':
+        case 'listUpdated':
+        case 'listDeleted':
+          // Instead of updating immediately, fetch fresh board data
+          fetchBoard(currentBoard.id).catch(console.error);
+          break;
+      }
+    };
+
+    // Set up event listener
+    socketService.onBoardEvent(currentBoard.id, handleBoardEvent);
+
+    // Cleanup function
+    return () => {
+      console.log(`Cleaning up socket listeners for board: ${currentBoard.id}`);
+      socketService.leaveBoard(currentBoard.id);
+      socketService.offBoardEvent(currentBoard.id, handleBoardEvent);
+    };
+  }, [currentBoard?.id, fetchBoard]);
 
   const loadBoards = async () => {
     try {
       console.log('Loading boards...');
       const data = await getBoards();
       console.log('Boards loaded from API:', data);
-      setBoards(data);
-      if (currentBoard) {
-        const updatedCurrentBoard = data.find((board: { id: string; }) => board.id === currentBoard.id);
-        if (updatedCurrentBoard) {
-          setCurrentBoard(updatedCurrentBoard);
+      if (Array.isArray(data)) {
+        setBoards(data);
+        if (currentBoard) {
+          const updatedCurrentBoard = data.find(board => board.id === currentBoard.id);
+          if (updatedCurrentBoard) {
+            setCurrentBoard(updatedCurrentBoard);
+          }
         }
+      } else {
+        console.error('Invalid boards data received:', data);
+        setBoards([]);
       }
     } catch (error) {
       console.error('Error loading boards:', error);
+      setBoards([]);
     }
   };
 
-  const fetchBoard = async (boardId: string): Promise<Board> => {
-    try {
-      if (!boardId || boardId === 'undefined') {
-        throw new Error('Board ID is missing or invalid');
-      }
-
-      // First try to find the board in the local state
-      let board: Board | undefined = boards.find((b: Board) => b && b.id === boardId);
-      
-      // If not found locally or if the board data is invalid, fetch from API
-      if (!board || !board.id || board.id === 'undefined') {
-        try {
-          const fetchedBoard = await apiGetBoard(boardId);
-          if (!fetchedBoard || !fetchedBoard.id) {
-            throw new Error('Invalid board data received from server');
-          }
-          // Add to local state if not already present
-          setBoards(prev => {
-            const exists = prev.some(b => b.id === fetchedBoard.id);
-            return exists ? prev : [...prev, fetchedBoard];
-          });
-          board = fetchedBoard;
-        } catch (error) {
-          console.error('Error fetching board from API:', error);
-          throw error;
-        }
-      }
-      
-      if (!board || !board.id) {
-        throw new Error('Board not found');
-      }
-      
-      setCurrentBoard(board);
-      return board;
-    } catch (error) {
-      console.error('Error fetching board:', error);
-      setCurrentBoard(null);
-      throw error;
-    }
-  };
-
-  const createBoard = async (title: string, background: string): Promise<string> => {
-    try {
-      const newBoard = await apiCreateBoard({ title, background });
-      setBoards(prev => [...prev, newBoard]);
-      setCurrentBoard(newBoard);
-      return newBoard.id;
-    } catch (error) {
-      console.error('Error creating board:', error);
-      throw error;
-    }
-  };
-
-  const deleteBoard = async (boardId: string): Promise<void> => {
+  const handleDeleteBoard = async (boardId: string): Promise<void> => {
     try {
       await apiDeleteBoard(boardId);
       setBoards(prev => prev.filter(board => board.id !== boardId));
@@ -233,13 +224,13 @@ export const BoardProvider: React.FC<BoardProviderProps> = ({ children }) => {
     }
   };
 
-  const updateBoard = async (updatedBoard: Board): Promise<void> => {
+  const handleUpdateBoard = async (board: Board): Promise<void> => {
     try {
-      const result = await apiUpdateBoard(updatedBoard.id, updatedBoard);
-      setBoards(prev => prev.map(board => 
-        board.id === updatedBoard.id ? result : board
+      const result = await apiUpdateBoard(board.id, board);
+      setBoards(prev => prev.map(b => 
+        b.id === board.id ? result : b
       ));
-      if (currentBoard?.id === updatedBoard.id) {
+      if (currentBoard?.id === board.id) {
         setCurrentBoard(result);
       }
     } catch (error) {
@@ -248,21 +239,31 @@ export const BoardProvider: React.FC<BoardProviderProps> = ({ children }) => {
     }
   };
 
-  const addList = async (boardId: string, title: string): Promise<void> => {
+  const handleAddList = useCallback(async (boardId: string, title: string) => {
     try {
+      if (!boardId || !title.trim()) {
+        throw new Error('Board ID and title are required');
+      }
+
+      // The API call will handle emitting the socket event
       const newList = await apiCreateList(boardId, { title });
-      setBoards(prev => prev.map(board => 
-        board.id === boardId 
-          ? { ...board, lists: [...board.lists, newList] }
-          : board
-      ));
+
+      if (currentBoard?.id === boardId) {
+        setCurrentBoard(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            lists: [...(prev.lists || []), newList]
+          };
+        });
+      }
     } catch (error) {
       console.error('Error adding list:', error);
       throw error;
     }
-  };
+  }, [currentBoard?.id]);
 
-  const updateList = async (listId: string, updates: Partial<List>): Promise<void> => {
+  const handleUpdateList = async (listId: string, updates: Partial<List>): Promise<void> => {
     try {
       const updatedList = await apiUpdateList(listId, updates);
       setBoards(prev => prev.map(board => ({
@@ -277,7 +278,7 @@ export const BoardProvider: React.FC<BoardProviderProps> = ({ children }) => {
     }
   };
 
-  const deleteList = async (listId: string): Promise<void> => {
+  const handleDeleteList = async (listId: string): Promise<void> => {
     try {
       await apiDeleteList(listId);
       setBoards(prev => prev.map(board => ({
@@ -290,37 +291,36 @@ export const BoardProvider: React.FC<BoardProviderProps> = ({ children }) => {
     }
   };
 
-  const addCard = async (listId: string, title: string): Promise<void> => {
+  const handleAddCard = async (listId: string, title: string): Promise<void> => {
     try {
-      if (!listId || listId === 'undefined') {
-        throw new Error('Invalid list ID');
-      }
-      if (!title || !title.trim()) {
-        throw new Error('Card title is required');
-      }
-
-      // Verify the list exists in the current board
-      const listExists = currentBoard?.lists.some(list => list.id === listId);
-      if (!listExists) {
-        throw new Error('List not found in current board');
-      }
-
-      const newCard = await apiCreateCard(listId, { title: title.trim() });
+      const newCard = await apiCreateCard(listId, { title });
+      
       setBoards(prev => prev.map(board => ({
         ...board,
-        lists: board.lists.map(list => 
-          list.id === listId 
+        lists: board.lists.map(list =>
+          list.id === listId
             ? { ...list, cards: [...list.cards, newCard] }
             : list
         )
       })));
+
+      if (currentBoard) {
+        setCurrentBoard({
+          ...currentBoard,
+          lists: currentBoard.lists.map(list =>
+            list.id === listId
+              ? { ...list, cards: [...list.cards, newCard] }
+              : list
+          )
+        });
+      }
     } catch (error) {
       console.error('Error adding card:', error);
       throw error;
     }
   };
 
-  const updateCard = async (cardId: string, updates: Partial<Card>): Promise<void> => {
+  const handleUpdateCard = async (cardId: string, updates: Partial<Card>): Promise<void> => {
     try {
       const updatedCard = await apiUpdateCard(cardId, updates);
       setBoards(prev => prev.map(board => ({
@@ -338,7 +338,7 @@ export const BoardProvider: React.FC<BoardProviderProps> = ({ children }) => {
     }
   };
 
-  const deleteCard = async (cardId: string): Promise<void> => {
+  const handleDeleteCard = async (cardId: string): Promise<void> => {
     try {
       await apiDeleteCard(cardId);
       setBoards(prev => prev.map(board => ({
@@ -354,56 +354,89 @@ export const BoardProvider: React.FC<BoardProviderProps> = ({ children }) => {
     }
   };
 
-  const moveCard = async (cardId: string, sourceListId: string, destListId: string, destIndex: number): Promise<void> => {
+  const handleMoveCard = async (cardId: string, sourceListId: string, destListId: string, destIndex: number): Promise<void> => {
     try {
       await apiMoveCard(cardId, sourceListId, destListId, destIndex);
-      setBoards(prev => prev.map(board => ({
-        ...board,
-        lists: board.lists.map(list => {
-          if (list.id === sourceListId) {
-            return {
-              ...list,
-              cards: list.cards.filter(card => card.id !== cardId)
-            };
-          }
-          if (list.id === destListId) {
-            const card = board.lists
-              .find(l => l.id === sourceListId)
-              ?.cards.find(c => c.id === cardId);
-            if (card) {
-              const newCards = [...list.cards];
-              newCards.splice(destIndex, 0, card);
-              return { ...list, cards: newCards };
+      setBoards(prev => prev.map(board => {
+        const sourceList = board.lists.find(list => list.id === sourceListId);
+        const card = sourceList?.cards.find(c => c.id === cardId);
+        
+        if (!card) return board;
+
+        return {
+          ...board,
+          lists: board.lists.map(list => {
+            if (list.id === sourceListId) {
+              return {
+                ...list,
+                cards: list.cards.filter(c => c.id !== cardId)
+              };
             }
-          }
-          return list;
-        })
-      })));
+            if (list.id === destListId) {
+              const newCards = [...list.cards];
+              newCards.splice(destIndex, 0, { ...card });
+              return {
+                ...list,
+                cards: newCards
+              };
+            }
+            return list;
+          })
+        };
+      }));
     } catch (error) {
       console.error('Error moving card:', error);
       throw error;
     }
   };
 
-  const value = {
-    boards,
-    currentBoard,
-    createBoard,
-    deleteBoard,
-    setCurrentBoard,
-    updateBoard,
-    addList,
-    updateList,
-    deleteList,
-    addCard,
-    updateCard,
-    deleteCard,
-    moveCard,
-    fetchBoard
+  const handleCreateBoard = async (title: string, background: string): Promise<string> => {
+    try {
+      const newBoard = await apiCreateBoard({ title, background });
+      setBoards(prev => [...prev, newBoard]);
+      setCurrentBoard(newBoard);
+      return newBoard.id;
+    } catch (error) {
+      console.error('Error creating board:', error);
+      throw error;
+    }
   };
 
+  // Memoize the context value
+  const contextValue = useMemo(() => ({
+    boards,
+    currentBoard,
+    createBoard: handleCreateBoard,
+    deleteBoard: handleDeleteBoard,
+    setCurrentBoard: setCurrentBoardSafely,
+    updateBoard: handleUpdateBoard,
+    addList: handleAddList,
+    updateList: handleUpdateList,
+    deleteList: handleDeleteList,
+    addCard: handleAddCard,
+    updateCard: handleUpdateCard,
+    deleteCard: handleDeleteCard,
+    moveCard: handleMoveCard,
+    fetchBoard
+  }), [
+    boards,
+    currentBoard,
+    handleCreateBoard,
+    handleDeleteBoard,
+    setCurrentBoardSafely,
+    handleUpdateBoard,
+    handleAddList,
+    handleUpdateList,
+    handleDeleteList,
+    handleAddCard,
+    handleUpdateCard,
+    handleDeleteCard,
+    handleMoveCard,
+    fetchBoard
+  ]);
+
   return (
-    <BoardContext.Provider value={value}>
+    <BoardContext.Provider value={contextValue}>
       {children}
     </BoardContext.Provider>
   );

@@ -59,8 +59,11 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
+    console.log('Login attempt:', { email: req.body.email });
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
@@ -68,18 +71,25 @@ exports.login = async (req, res) => {
 
     // Find user
     const user = await User.findOne({ email });
+    console.log('User found:', user ? 'Yes' : 'No');
+    
     if (!user) {
+      console.log('User not found for email:', email);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     // Check password
     const isMatch = await user.comparePassword(password);
+    console.log('Password match:', isMatch ? 'Yes' : 'No');
+    
     if (!isMatch) {
+      console.log('Invalid password for user:', email);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     // Generate token
     const token = generateToken(user._id);
+    console.log('Login successful for user:', email);
 
     res.json({
       user: {
@@ -92,6 +102,7 @@ exports.login = async (req, res) => {
       token
     });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ message: 'Error logging in' });
   }
 };
